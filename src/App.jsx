@@ -25,48 +25,6 @@ const radiusOptions = [
 const defaultAddress = 'Civic Center, San Francisco, CA'
 const defaultCenter = [37.7749, -122.4194]
 
-const streetTemplates = [
-  {
-    street: 'Maple Ave',
-    grade: '2.8%',
-    distance: '0.1 mi',
-    color: '#2e8b57',
-    colorClass: 'grade-green',
-    offsets: [
-      [0.0012, -0.0034],
-      [0.0005, -0.0018],
-      [-0.0002, 0.0003],
-      [-0.0011, 0.0024],
-    ],
-  },
-  {
-    street: 'Grant St',
-    grade: '6.1%',
-    distance: '0.2 mi',
-    color: '#f0b429',
-    colorClass: 'grade-yellow',
-    offsets: [
-      [0.0026, 0.0022],
-      [0.0014, 0.0012],
-      [-0.0001, 0.0002],
-      [-0.0013, -0.0004],
-    ],
-  },
-  {
-    street: 'Cedar Hill Rd',
-    grade: '9.4%',
-    distance: '0.3 mi',
-    color: '#d95d39',
-    colorClass: 'grade-red',
-    offsets: [
-      [-0.0025, -0.0036],
-      [-0.0017, -0.0017],
-      [-0.0007, 0.0004],
-      [0.0003, 0.0022],
-    ],
-  },
-]
-
 function RecenterMap({ center }) {
   const map = useMap()
 
@@ -80,14 +38,54 @@ function RecenterMap({ center }) {
   return null
 }
 
-function shiftSegments(center) {
-  return streetTemplates.map((segment) => ({
-    ...segment,
-    positions: segment.offsets.map(([latOffset, lngOffset]) => [
-      center[0] + latOffset,
-      center[1] + lngOffset,
-    ]),
-  }))
+function getMockGradeDetails(index) {
+  const palette = [
+    { grade: '2.8%', color: '#2e8b57', colorClass: 'grade-green' },
+    { grade: '6.1%', color: '#f0b429', colorClass: 'grade-yellow' },
+    { grade: '9.4%', color: '#d95d39', colorClass: 'grade-red' },
+  ]
+
+  return palette[index % palette.length]
+}
+
+function metersToMilesLabel(meters) {
+  return `${(meters / 1609.34).toFixed(1)} mi`
+}
+
+function calculateSegmentLength(geometry) {
+  let totalMeters = 0
+
+  for (let index = 1; index < geometry.length; index += 1) {
+    const previous = geometry[index - 1]
+    const current = geometry[index]
+    const latDistance = (current.lat - previous.lat) * 111320
+    const averageLatitude = ((current.lat + previous.lat) / 2) * (Math.PI / 180)
+    const lngDistance = (current.lon - previous.lon) * 111320 * Math.cos(averageLatitude)
+
+    totalMeters += Math.hypot(latDistance, lngDistance)
+  }
+
+  return totalMeters
+}
+
+function buildStreetSegments(elements) {
+  return elements
+    .filter((element) => element.type === 'way' && Array.isArray(element.geometry))
+    .slice(0, 60)
+    .map((element, index) => {
+      const gradeDetails = getMockGradeDetails(index)
+      const segmentLength = calculateSegmentLength(element.geometry)
+
+      return {
+        id: element.id,
+        street: element.tags?.name || `Unnamed street ${index + 1}`,
+        distance: metersToMilesLabel(segmentLength),
+        grade: gradeDetails.grade,
+        color: gradeDetails.color,
+        colorClass: gradeDetails.colorClass,
+        positions: element.geometry.map((point) => [point.lat, point.lon]),
+      }
+    })
 }
 
 function App() {
@@ -97,11 +95,71 @@ function App() {
   const [mapCenter, setMapCenter] = useState(defaultCenter)
   const [searchState, setSearchState] = useState('idle')
   const [feedback, setFeedback] = useState('Search for an address to recenter the map preview.')
+  const [streetFetchState, setStreetFetchState] = useState('idle')
+  const [streetFeedback, setStreetFeedback] = useState(
+    'Searching the nearby street network for this area.',
+  )
+  const [nearbySegments, setNearbySegments] = useState([])
 
   const selectedRadiusOption =
     radiusOptions.find((option) => option.label === selectedRadius) ?? radiusOptions[1]
 
-  const nearbySegments = shiftSegments(mapCenter)
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function fetchNearbyStreets() {
+      setStreetFetchState('loading')
+      setStreetFeedback('Loading real street segments in the selected radius...')
+
+      const overpassQuery = `
+        [out:json][timeout:25];
+        (
+          way["highway"](around:${selectedRadiusOption.meters},${mapCenter[0]},${mapCenter[1]});
+        );
+        out geom tags qt;
+      `
+
+      try {
+        const response = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          body: overpassQuery,
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error('Street network lookup failed.')
+        }
+
+        const data = await response.json()
+        const segments = buildStreetSegments(data.elements || [])
+
+        if (!segments.length) {
+          setNearbySegments([])
+          setStreetFetchState('error')
+          setStreetFeedback('No nearby streets were returned for this area yet.')
+          return
+        }
+
+        setNearbySegments(segments)
+        setStreetFetchState('success')
+        setStreetFeedback(
+          `Showing ${segments.length} nearby street segments within ${selectedRadiusOption.label}.`,
+        )
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          return
+        }
+
+        setNearbySegments([])
+        setStreetFetchState('error')
+        setStreetFeedback('Street data is unavailable right now. Try the search again in a moment.')
+      }
+    }
+
+    fetchNearbyStreets()
+
+    return () => controller.abort()
+  }, [mapCenter, selectedRadiusOption])
 
   async function handleSearch(event) {
     event.preventDefault()
@@ -222,6 +280,10 @@ function App() {
             </div>
           </div>
 
+          <p className={`map-status map-status-${streetFetchState}`} aria-live="polite">
+            {streetFeedback}
+          </p>
+
           <div className="map-frame">
             <MapContainer
               center={mapCenter}
@@ -258,14 +320,16 @@ function App() {
 
               {nearbySegments.map((segment) => (
                 <Polyline
-                  key={segment.street}
+                  key={segment.id}
                   positions={segment.positions}
-                  pathOptions={{ color: segment.color, weight: 8, lineCap: 'round' }}
+                  pathOptions={{ color: segment.color, weight: 6, lineCap: 'round' }}
                 >
                   <Popup>
                     <strong>{segment.street}</strong>
                     <br />
-                    Estimated grade: {segment.grade}
+                    Temporary grade preview: {segment.grade}
+                    <br />
+                    Segment length: {segment.distance}
                   </Popup>
                 </Polyline>
               ))}
@@ -278,16 +342,16 @@ function App() {
 
         <aside className="insight-card">
           <div>
-            <p className="section-label">Nearby Sample</p>
-            <h2>What the first experience should communicate</h2>
+            <p className="section-label">Nearby Streets</p>
+            <h2>Real nearby street geometry with temporary color buckets</h2>
           </div>
 
           <ul className="segment-list">
-            {nearbySegments.map((segment) => (
-              <li className="segment-item" key={segment.street}>
+            {nearbySegments.slice(0, 8).map((segment) => (
+              <li className="segment-item" key={segment.id}>
                 <div>
                   <p className="segment-name">{segment.street}</p>
-                  <p className="segment-meta">{segment.distance} away</p>
+                  <p className="segment-meta">{segment.distance} segment length</p>
                 </div>
                 <div className="segment-grade">
                   <span className={`grade ${segment.colorClass}`} aria-hidden="true" />
@@ -301,8 +365,8 @@ function App() {
             <p className="section-label">V1 Focus</p>
             <ul>
               <li>Address search with simple radius controls</li>
-              <li>Responsive map-first layout for web</li>
-              <li>Clear grade colors and an easy legend</li>
+              <li>Real nearby streets from OpenStreetMap</li>
+              <li>Placeholder colors now, real elevation grades next</li>
             </ul>
           </div>
         </aside>

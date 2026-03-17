@@ -158,6 +158,25 @@
   margin-bottom: 1rem;
 }
 
+.map-status {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.map-status-loading {
+  color: #6d5d2f;
+}
+
+.map-status-success {
+  color: #246444;
+}
+
+.map-status-error {
+  color: #9a3d2a;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;
