@@ -1,3 +1,4 @@
+import { MapContainer, Marker, Polyline, Popup, TileLayer } from 'react-leaflet'
 import './App.css'
 
 const gradeBands = [
@@ -10,6 +11,44 @@ const nearbySegments = [
   { street: 'Maple Ave', distance: '0.1 mi', grade: '2.8%', colorClass: 'grade-green' },
   { street: 'Grant St', distance: '0.2 mi', grade: '6.1%', colorClass: 'grade-yellow' },
   { street: 'Cedar Hill Rd', distance: '0.3 mi', grade: '9.4%', colorClass: 'grade-red' },
+]
+
+const mapCenter = [37.7749, -122.4194]
+
+const sampleStreetGrades = [
+  {
+    street: 'Maple Ave',
+    grade: '2.8%',
+    color: '#2e8b57',
+    positions: [
+      [37.7761, -122.4235],
+      [37.7754, -122.4219],
+      [37.7747, -122.4198],
+      [37.7738, -122.4177],
+    ],
+  },
+  {
+    street: 'Grant St',
+    grade: '6.1%',
+    color: '#f0b429',
+    positions: [
+      [37.7775, -122.4168],
+      [37.7763, -122.4176],
+      [37.7748, -122.4186],
+      [37.7736, -122.4192],
+    ],
+  },
+  {
+    street: 'Cedar Hill Rd',
+    grade: '9.4%',
+    color: '#d95d39',
+    positions: [
+      [37.7724, -122.4237],
+      [37.7732, -122.4218],
+      [37.7742, -122.4197],
+      [37.7751, -122.4179],
+    ],
+  },
 ]
 
 function App() {
@@ -75,14 +114,43 @@ function App() {
             </div>
           </div>
 
-          <div className="map-placeholder" role="img" aria-label="Street grade preview map">
-            <div className="map-grid" />
-            <div className="map-center-point" />
-            <div className="path path-green path-one" />
-            <div className="path path-yellow path-two" />
-            <div className="path path-red path-three" />
-            <div className="map-pill map-pill-top">Home address</div>
-            <div className="map-pill map-pill-bottom">Street grade preview</div>
+          <div className="map-frame">
+            <MapContainer
+              center={mapCenter}
+              zoom={15}
+              scrollWheelZoom
+              className="leaflet-map"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+
+              <Marker position={mapCenter}>
+                <Popup>
+                  Selected address
+                  <br />
+                  Street grades will radiate from here.
+                </Popup>
+              </Marker>
+
+              {sampleStreetGrades.map((segment) => (
+                <Polyline
+                  key={segment.street}
+                  positions={segment.positions}
+                  pathOptions={{ color: segment.color, weight: 8, lineCap: 'round' }}
+                >
+                  <Popup>
+                    <strong>{segment.street}</strong>
+                    <br />
+                    Estimated grade: {segment.grade}
+                  </Popup>
+                </Polyline>
+              ))}
+            </MapContainer>
+
+            <div className="map-pill map-pill-top">Selected address</div>
+            <div className="map-pill map-pill-bottom">Sample street grades</div>
           </div>
         </div>
 

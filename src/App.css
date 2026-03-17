@@ -154,7 +154,7 @@
   align-items: center;
 }
 
-.map-placeholder {
+.map-frame {
   position: relative;
   min-height: 32rem;
   overflow: hidden;
@@ -164,55 +164,6 @@
     radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.95), transparent 18%),
     radial-gradient(circle at 80% 12%, rgba(255, 214, 153, 0.45), transparent 18%),
     linear-gradient(180deg, #f6f8ef 0%, #edf2e3 100%);
-}
-
-.map-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(79, 104, 82, 0.09) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(79, 104, 82, 0.09) 1px, transparent 1px);
-  background-size: 4.5rem 4.5rem;
-}
-
-.map-center-point {
-  position: absolute;
-  top: 47%;
-  left: 48%;
-  width: 1rem;
-  height: 1rem;
-  border-radius: 999px;
-  background: #123c2a;
-  box-shadow: 0 0 0 10px rgba(18, 60, 42, 0.12);
-}
-
-.path {
-  position: absolute;
-  height: 0.85rem;
-  border-radius: 999px;
-  transform-origin: center;
-  box-shadow: 0 10px 24px rgba(47, 56, 40, 0.18);
-}
-
-.path-one {
-  width: 42%;
-  top: 38%;
-  left: 18%;
-  transform: rotate(-18deg);
-}
-
-.path-two {
-  width: 35%;
-  top: 51%;
-  left: 38%;
-  transform: rotate(12deg);
-}
-
-.path-three {
-  width: 31%;
-  top: 64%;
-  left: 25%;
-  transform: rotate(-41deg);
 }
 
 .path-green,
@@ -249,6 +200,15 @@
 .map-pill-bottom {
   right: 1rem;
   bottom: 1rem;
+}
+
+.leaflet-map {
+  height: 32rem;
+  width: 100%;
+}
+
+.leaflet-container {
+  font-family: inherit;
 }
 
 .insight-card {
@@ -348,7 +308,12 @@
   }
 
   .map-placeholder {
+  .map-frame {
     min-height: 24rem;
+  }
+
+  .leaflet-map {
+    height: 24rem;
   }
 
   .segment-item {
