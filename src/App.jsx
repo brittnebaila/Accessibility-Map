@@ -24,6 +24,9 @@ const radiusOptions = [
 
 const defaultAddress = 'Civic Center, San Francisco, CA'
 const defaultCenter = [37.7749, -122.4194]
+const streetLimit = 24
+const elevationSamplesPerSegment = 4
+const elevationBatchSize = 40
 
 function RecenterMap({ center }) {
   const map = useMap()
@@ -38,54 +41,213 @@ function RecenterMap({ center }) {
   return null
 }
 
-function getMockGradeDetails(index) {
-  const palette = [
-    { grade: '2.8%', color: '#2e8b57', colorClass: 'grade-green' },
-    { grade: '6.1%', color: '#f0b429', colorClass: 'grade-yellow' },
-    { grade: '9.4%', color: '#d95d39', colorClass: 'grade-red' },
-  ]
-
-  return palette[index % palette.length]
-}
-
 function metersToMilesLabel(meters) {
   return `${(meters / 1609.34).toFixed(1)} mi`
 }
 
-function calculateSegmentLength(geometry) {
+function calculateDistanceInMeters(start, end) {
+  const latDistance = (end[0] - start[0]) * 111320
+  const averageLatitude = ((start[0] + end[0]) / 2) * (Math.PI / 180)
+  const lngDistance = (end[1] - start[1]) * 111320 * Math.cos(averageLatitude)
+
+  return Math.hypot(latDistance, lngDistance)
+}
+
+function calculateSegmentLength(positions) {
   let totalMeters = 0
 
-  for (let index = 1; index < geometry.length; index += 1) {
-    const previous = geometry[index - 1]
-    const current = geometry[index]
-    const latDistance = (current.lat - previous.lat) * 111320
-    const averageLatitude = ((current.lat + previous.lat) / 2) * (Math.PI / 180)
-    const lngDistance = (current.lon - previous.lon) * 111320 * Math.cos(averageLatitude)
-
-    totalMeters += Math.hypot(latDistance, lngDistance)
+  for (let index = 1; index < positions.length; index += 1) {
+    totalMeters += calculateDistanceInMeters(positions[index - 1], positions[index])
   }
 
   return totalMeters
 }
 
+function interpolatePoint(start, end, ratio) {
+  return [
+    start[0] + (end[0] - start[0]) * ratio,
+    start[1] + (end[1] - start[1]) * ratio,
+  ]
+}
+
+function sampleLinePoints(positions, sampleCount) {
+  if (positions.length <= sampleCount) {
+    return positions
+  }
+
+  const segmentLengths = []
+  let totalLength = 0
+
+  for (let index = 1; index < positions.length; index += 1) {
+    const length = calculateDistanceInMeters(positions[index - 1], positions[index])
+    segmentLengths.push(length)
+    totalLength += length
+  }
+
+  if (totalLength === 0) {
+    return positions.slice(0, sampleCount)
+  }
+
+  const sampledPoints = []
+
+  for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+    const targetDistance = (totalLength * sampleIndex) / (sampleCount - 1)
+    let traversedDistance = 0
+
+    for (let segmentIndex = 0; segmentIndex < segmentLengths.length; segmentIndex += 1) {
+      const nextDistance = traversedDistance + segmentLengths[segmentIndex]
+
+      if (targetDistance <= nextDistance || segmentIndex === segmentLengths.length - 1) {
+        const segmentLength = segmentLengths[segmentIndex]
+
+        if (segmentLength === 0) {
+          sampledPoints.push(positions[segmentIndex])
+        } else {
+          const ratio = (targetDistance - traversedDistance) / segmentLength
+          sampledPoints.push(
+            interpolatePoint(positions[segmentIndex], positions[segmentIndex + 1], ratio),
+          )
+        }
+
+        break
+      }
+
+      traversedDistance = nextDistance
+    }
+  }
+
+  return sampledPoints
+}
+
+function classifyGrade(maxGrade) {
+  if (maxGrade <= 4) {
+    return { label: `${maxGrade.toFixed(1)}%`, color: '#2e8b57', colorClass: 'grade-green' }
+  }
+
+  if (maxGrade <= 8) {
+    return { label: `${maxGrade.toFixed(1)}%`, color: '#f0b429', colorClass: 'grade-yellow' }
+  }
+
+  return { label: `${maxGrade.toFixed(1)}%`, color: '#d95d39', colorClass: 'grade-red' }
+}
+
 function buildStreetSegments(elements) {
   return elements
     .filter((element) => element.type === 'way' && Array.isArray(element.geometry))
-    .slice(0, 60)
+    .slice(0, streetLimit)
     .map((element, index) => {
-      const gradeDetails = getMockGradeDetails(index)
-      const segmentLength = calculateSegmentLength(element.geometry)
+      const positions = element.geometry.map((point) => [point.lat, point.lon])
+      const segmentLength = calculateSegmentLength(positions)
 
       return {
         id: element.id,
+        order: index,
         street: element.tags?.name || `Unnamed street ${index + 1}`,
         distance: metersToMilesLabel(segmentLength),
-        grade: gradeDetails.grade,
-        color: gradeDetails.color,
-        colorClass: gradeDetails.colorClass,
-        positions: element.geometry.map((point) => [point.lat, point.lon]),
+        lengthMeters: segmentLength,
+        positions,
+        grade: 'Calculating...',
+        color: '#6d7e75',
+        colorClass: 'grade-pending',
       }
     })
+}
+
+function applyElevationGrades(segments, elevationsBySegment) {
+  return segments.map((segment) => {
+    const elevationPoints = elevationsBySegment.get(segment.id) || []
+
+    if (elevationPoints.length < 2) {
+      return {
+        ...segment,
+        grade: 'N/A',
+        color: '#7a7a7a',
+        colorClass: 'grade-pending',
+      }
+    }
+
+    let maxGrade = 0
+
+    for (let index = 1; index < elevationPoints.length; index += 1) {
+      const previous = elevationPoints[index - 1]
+      const current = elevationPoints[index]
+      const run = calculateDistanceInMeters(previous.location, current.location)
+
+      if (run === 0) {
+        continue
+      }
+
+      const rise = Math.abs(current.elevation - previous.elevation)
+      const grade = (rise / run) * 100
+      maxGrade = Math.max(maxGrade, grade)
+    }
+
+    const classification = classifyGrade(maxGrade)
+
+    return {
+      ...segment,
+      grade: classification.label,
+      color: classification.color,
+      colorClass: classification.colorClass,
+    }
+  })
+}
+
+async function fetchElevationGrades(segments, signal) {
+  const sampledPoints = []
+  const pointLookup = []
+
+  segments.forEach((segment) => {
+    const samples = sampleLinePoints(segment.positions, elevationSamplesPerSegment)
+
+    samples.forEach((location) => {
+      sampledPoints.push(`${location[0]},${location[1]}`)
+      pointLookup.push({ segmentId: segment.id, location })
+    })
+  })
+
+  if (!sampledPoints.length) {
+    return segments
+  }
+
+  const elevationsBySegment = new Map()
+  const batches = []
+
+  for (let index = 0; index < pointLookup.length; index += elevationBatchSize) {
+    batches.push(pointLookup.slice(index, index + elevationBatchSize))
+  }
+
+  for (const batch of batches) {
+    const latitudes = batch.map((point) => point.location[0]).join(',')
+    const longitudes = batch.map((point) => point.location[1]).join(',')
+    const response = await fetch(
+      `https://api.open-meteo.com/v1/elevation?latitude=${encodeURIComponent(latitudes)}&longitude=${encodeURIComponent(longitudes)}`,
+      { signal },
+    )
+
+    if (!response.ok) {
+      throw new Error(`Elevation lookup failed with status ${response.status}.`)
+    }
+
+    const data = await response.json()
+
+    ;(data.elevation || []).forEach((elevation, index) => {
+      const lookup = batch[index]
+
+      if (!lookup || elevation === null || elevation === undefined) {
+        return
+      }
+
+      const segmentPoints = elevationsBySegment.get(lookup.segmentId) || []
+      segmentPoints.push({
+        elevation: Number(elevation),
+        location: lookup.location,
+      })
+      elevationsBySegment.set(lookup.segmentId, segmentPoints)
+    })
+  }
+
+  return applyElevationGrades(segments, elevationsBySegment)
 }
 
 function App() {
@@ -109,7 +271,7 @@ function App() {
 
     async function fetchNearbyStreets() {
       setStreetFetchState('loading')
-      setStreetFeedback('Loading real street segments in the selected radius...')
+      setStreetFeedback('Loading nearby streets and calculating grades...')
 
       const overpassQuery = `
         [out:json][timeout:25];
@@ -141,10 +303,30 @@ function App() {
         }
 
         setNearbySegments(segments)
-        setStreetFetchState('success')
+        setStreetFetchState('loading')
         setStreetFeedback(
-          `Showing ${segments.length} nearby street segments within ${selectedRadiusOption.label}.`,
+          `Loaded ${segments.length} street segments. Calculating elevation-based grades...`,
         )
+
+        try {
+          const gradedSegments = await fetchElevationGrades(segments, controller.signal)
+
+          setNearbySegments(gradedSegments)
+          setStreetFetchState('success')
+          setStreetFeedback(
+            `Showing ${gradedSegments.length} nearby street segments with computed grade estimates.`,
+          )
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            return
+          }
+
+          setNearbySegments(segments)
+          setStreetFetchState('error')
+          setStreetFeedback(
+            `Loaded street geometry, but grade calculation failed: ${error.message}`,
+          )
+        }
       } catch (error) {
         if (error.name === 'AbortError') {
           return
@@ -152,7 +334,7 @@ function App() {
 
         setNearbySegments([])
         setStreetFetchState('error')
-        setStreetFeedback('Street data is unavailable right now. Try the search again in a moment.')
+        setStreetFeedback(`Street lookup failed: ${error.message}`)
       }
     }
 
@@ -327,7 +509,7 @@ function App() {
                   <Popup>
                     <strong>{segment.street}</strong>
                     <br />
-                    Temporary grade preview: {segment.grade}
+                    Estimated max grade: {segment.grade}
                     <br />
                     Segment length: {segment.distance}
                   </Popup>
@@ -343,7 +525,7 @@ function App() {
         <aside className="insight-card">
           <div>
             <p className="section-label">Nearby Streets</p>
-            <h2>Real nearby street geometry with temporary color buckets</h2>
+            <h2>Real nearby street geometry with estimated elevation grades</h2>
           </div>
 
           <ul className="segment-list">
@@ -366,7 +548,7 @@ function App() {
             <ul>
               <li>Address search with simple radius controls</li>
               <li>Real nearby streets from OpenStreetMap</li>
-              <li>Placeholder colors now, real elevation grades next</li>
+              <li>Grades estimated from sampled elevation points</li>
             </ul>
           </div>
         </aside>

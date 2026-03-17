@@ -215,6 +215,10 @@
   background: #d95d39;
 }
 
+.grade-pending {
+  background: #7a7a7a;
+}
+
 .map-pill {
   position: absolute;
   z-index: 500;
