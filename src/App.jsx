@@ -1,4 +1,13 @@
-import { MapContainer, Marker, Polyline, Popup, TileLayer } from 'react-leaflet'
+import { useEffect, useState } from 'react'
+import {
+  Circle,
+  MapContainer,
+  Marker,
+  Polyline,
+  Popup,
+  TileLayer,
+  useMap,
+} from 'react-leaflet'
 import './App.css'
 
 const gradeBands = [
@@ -7,51 +16,142 @@ const gradeBands = [
   { label: 'Steep', range: '8%+', colorClass: 'grade grade-red' },
 ]
 
-const nearbySegments = [
-  { street: 'Maple Ave', distance: '0.1 mi', grade: '2.8%', colorClass: 'grade-green' },
-  { street: 'Grant St', distance: '0.2 mi', grade: '6.1%', colorClass: 'grade-yellow' },
-  { street: 'Cedar Hill Rd', distance: '0.3 mi', grade: '9.4%', colorClass: 'grade-red' },
+const radiusOptions = [
+  { label: '0.25 miles', meters: 402 },
+  { label: '0.5 miles', meters: 805 },
+  { label: '1 mile', meters: 1609 },
 ]
 
-const mapCenter = [37.7749, -122.4194]
+const defaultAddress = 'Civic Center, San Francisco, CA'
+const defaultCenter = [37.7749, -122.4194]
 
-const sampleStreetGrades = [
+const streetTemplates = [
   {
     street: 'Maple Ave',
     grade: '2.8%',
+    distance: '0.1 mi',
     color: '#2e8b57',
-    positions: [
-      [37.7761, -122.4235],
-      [37.7754, -122.4219],
-      [37.7747, -122.4198],
-      [37.7738, -122.4177],
+    colorClass: 'grade-green',
+    offsets: [
+      [0.0012, -0.0034],
+      [0.0005, -0.0018],
+      [-0.0002, 0.0003],
+      [-0.0011, 0.0024],
     ],
   },
   {
     street: 'Grant St',
     grade: '6.1%',
+    distance: '0.2 mi',
     color: '#f0b429',
-    positions: [
-      [37.7775, -122.4168],
-      [37.7763, -122.4176],
-      [37.7748, -122.4186],
-      [37.7736, -122.4192],
+    colorClass: 'grade-yellow',
+    offsets: [
+      [0.0026, 0.0022],
+      [0.0014, 0.0012],
+      [-0.0001, 0.0002],
+      [-0.0013, -0.0004],
     ],
   },
   {
     street: 'Cedar Hill Rd',
     grade: '9.4%',
+    distance: '0.3 mi',
     color: '#d95d39',
-    positions: [
-      [37.7724, -122.4237],
-      [37.7732, -122.4218],
-      [37.7742, -122.4197],
-      [37.7751, -122.4179],
+    colorClass: 'grade-red',
+    offsets: [
+      [-0.0025, -0.0036],
+      [-0.0017, -0.0017],
+      [-0.0007, 0.0004],
+      [0.0003, 0.0022],
     ],
   },
 ]
 
+function RecenterMap({ center }) {
+  const map = useMap()
+
+  useEffect(() => {
+    map.flyTo(center, map.getZoom(), {
+      animate: true,
+      duration: 1.2,
+    })
+  }, [center, map])
+
+  return null
+}
+
+function shiftSegments(center) {
+  return streetTemplates.map((segment) => ({
+    ...segment,
+    positions: segment.offsets.map(([latOffset, lngOffset]) => [
+      center[0] + latOffset,
+      center[1] + lngOffset,
+    ]),
+  }))
+}
+
 function App() {
+  const [addressInput, setAddressInput] = useState(defaultAddress)
+  const [selectedAddress, setSelectedAddress] = useState(defaultAddress)
+  const [selectedRadius, setSelectedRadius] = useState(radiusOptions[1].label)
+  const [mapCenter, setMapCenter] = useState(defaultCenter)
+  const [searchState, setSearchState] = useState('idle')
+  const [feedback, setFeedback] = useState('Search for an address to recenter the map preview.')
+
+  const selectedRadiusOption =
+    radiusOptions.find((option) => option.label === selectedRadius) ?? radiusOptions[1]
+
+  const nearbySegments = shiftSegments(mapCenter)
+
+  async function handleSearch(event) {
+    event.preventDefault()
+
+    const query = addressInput.trim()
+
+    if (!query) {
+      setSearchState('error')
+      setFeedback('Enter an address or landmark before previewing street grades.')
+      return
+    }
+
+    setSearchState('loading')
+    setFeedback(`Looking up "${query}"...`)
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            Accept: 'application/json',
+          },
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error('Address lookup failed.')
+      }
+
+      const results = await response.json()
+
+      if (!results.length) {
+        setSearchState('error')
+        setFeedback(`No result found for "${query}". Try a more specific address.`)
+        return
+      }
+
+      const match = results[0]
+      const nextCenter = [Number(match.lat), Number(match.lon)]
+
+      setMapCenter(nextCenter)
+      setSelectedAddress(match.display_name)
+      setSearchState('success')
+      setFeedback(`Showing a ${selectedRadiusOption.label} preview around ${match.display_name}.`)
+    } catch {
+      setSearchState('error')
+      setFeedback('Address lookup is unavailable right now. Try again in a moment.')
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -64,7 +164,7 @@ function App() {
           </p>
         </div>
 
-        <form className="search-card">
+        <form className="search-card" onSubmit={handleSearch}>
           <label className="field-group">
             <span className="field-label">Address</span>
             <input
@@ -72,25 +172,33 @@ function App() {
               type="text"
               placeholder="Enter an address or landmark"
               aria-label="Address"
+              value={addressInput}
+              onChange={(event) => setAddressInput(event.target.value)}
             />
           </label>
 
           <label className="field-group">
             <span className="field-label">Radius</span>
-            <select className="select-input" defaultValue="0.5 miles" aria-label="Radius">
-              <option>0.25 miles</option>
-              <option>0.5 miles</option>
-              <option>1 mile</option>
+            <select
+              className="select-input"
+              value={selectedRadius}
+              aria-label="Radius"
+              onChange={(event) => setSelectedRadius(event.target.value)}
+            >
+              {radiusOptions.map((option) => (
+                <option key={option.label} value={option.label}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
 
-          <button className="primary-button" type="button">
-            Preview street grades
+          <button className="primary-button" type="submit" disabled={searchState === 'loading'}>
+            {searchState === 'loading' ? 'Finding address...' : 'Preview street grades'}
           </button>
 
-          <p className="search-note">
-            First version: web-first, responsive, and focused on a fast visual
-            read of nearby terrain.
+          <p className={`search-note search-note-${searchState}`} aria-live="polite">
+            {feedback}
           </p>
         </form>
       </section>
@@ -121,20 +229,34 @@ function App() {
               scrollWheelZoom
               className="leaflet-map"
             >
+              <RecenterMap center={mapCenter} />
+
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
+              <Circle
+                center={mapCenter}
+                radius={selectedRadiusOption.meters}
+                pathOptions={{
+                  color: '#315641',
+                  fillColor: '#6ba77e',
+                  fillOpacity: 0.08,
+                  weight: 2,
+                  dashArray: '6 6',
+                }}
+              />
+
               <Marker position={mapCenter}>
                 <Popup>
-                  Selected address
+                  <strong>{selectedAddress}</strong>
                   <br />
-                  Street grades will radiate from here.
+                  Radius: {selectedRadiusOption.label}
                 </Popup>
               </Marker>
 
-              {sampleStreetGrades.map((segment) => (
+              {nearbySegments.map((segment) => (
                 <Polyline
                   key={segment.street}
                   positions={segment.positions}
@@ -150,7 +272,7 @@ function App() {
             </MapContainer>
 
             <div className="map-pill map-pill-top">Selected address</div>
-            <div className="map-pill map-pill-bottom">Sample street grades</div>
+            <div className="map-pill map-pill-bottom">{selectedRadiusOption.label} radius</div>
           </div>
         </div>
 

@@ -114,12 +114,30 @@
   box-shadow: 0 12px 24px rgba(47, 125, 85, 0.22);
   transition:
     transform 180ms ease,
-    box-shadow 180ms ease;
+    box-shadow 180ms ease,
+    opacity 180ms ease;
 }
 
 .primary-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 18px 28px rgba(47, 125, 85, 0.28);
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.82;
+}
+
+.search-note {
+  min-height: 2.5rem;
+}
+
+.search-note-success {
+  color: #246444;
+}
+
+.search-note-error {
+  color: #9a3d2a;
 }
 
 .workspace {
@@ -166,23 +184,21 @@
     linear-gradient(180deg, #f6f8ef 0%, #edf2e3 100%);
 }
 
-.path-green,
 .grade-green {
   background: #2e8b57;
 }
 
-.path-yellow,
 .grade-yellow {
   background: #f0b429;
 }
 
-.path-red,
 .grade-red {
   background: #d95d39;
 }
 
 .map-pill {
   position: absolute;
+  z-index: 500;
   border-radius: 999px;
   padding: 0.55rem 0.9rem;
   background: rgba(255, 255, 255, 0.92);
@@ -190,6 +206,7 @@
   font-size: 0.9rem;
   font-weight: 700;
   box-shadow: 0 14px 24px rgba(53, 66, 48, 0.12);
+  pointer-events: none;
 }
 
 .map-pill-top {
@@ -307,7 +324,6 @@
     padding: 1.1rem;
   }
 
-  .map-placeholder {
   .map-frame {
     min-height: 24rem;
   }
