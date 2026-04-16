@@ -24,7 +24,7 @@ const radiusOptions = [
 
 const defaultAddress = 'Civic Center, San Francisco, CA'
 const defaultCenter = [37.7749, -122.4194]
-const streetLimit = 24
+const streetLimit = 80
 const elevationSamplesPerSegment = 4
 const elevationBatchSize = 40
 
@@ -51,6 +51,10 @@ function calculateDistanceInMeters(start, end) {
   const lngDistance = (end[1] - start[1]) * 111320 * Math.cos(averageLatitude)
 
   return Math.hypot(latDistance, lngDistance)
+}
+
+function calculateDistanceToCenter(position, center) {
+  return calculateDistanceInMeters(position, center)
 }
 
 function calculateSegmentLength(positions) {
@@ -131,13 +135,24 @@ function classifyGrade(maxGrade) {
   return { label: `${maxGrade.toFixed(1)}%`, color: '#d95d39', colorClass: 'grade-red' }
 }
 
-function buildStreetSegments(elements) {
+function buildStreetSegments(elements, center, radiusMeters) {
   return elements
     .filter((element) => element.type === 'way' && Array.isArray(element.geometry))
-    .slice(0, streetLimit)
     .map((element, index) => {
       const positions = element.geometry.map((point) => [point.lat, point.lon])
+
+      if (positions.length < 2) {
+        return null
+      }
+
       const segmentLength = calculateSegmentLength(positions)
+      const minDistanceToCenter = Math.min(
+        ...positions.map((position) => calculateDistanceToCenter(position, center)),
+      )
+
+      if (minDistanceToCenter > radiusMeters * 1.15) {
+        return null
+      }
 
       return {
         id: element.id,
@@ -145,12 +160,22 @@ function buildStreetSegments(elements) {
         street: element.tags?.name || `Unnamed street ${index + 1}`,
         distance: metersToMilesLabel(segmentLength),
         lengthMeters: segmentLength,
+        minDistanceToCenter,
         positions,
         grade: 'Calculating...',
         color: '#6d7e75',
         colorClass: 'grade-pending',
       }
     })
+    .filter(Boolean)
+    .sort((left, right) => {
+      if (left.minDistanceToCenter !== right.minDistanceToCenter) {
+        return left.minDistanceToCenter - right.minDistanceToCenter
+      }
+
+      return left.lengthMeters - right.lengthMeters
+    })
+    .slice(0, streetLimit)
 }
 
 function applyElevationGrades(segments, elevationsBySegment) {
@@ -293,7 +318,11 @@ function App() {
         }
 
         const data = await response.json()
-        const segments = buildStreetSegments(data.elements || [])
+        const segments = buildStreetSegments(
+          data.elements || [],
+          mapCenter,
+          selectedRadiusOption.meters,
+        )
 
         if (!segments.length) {
           setNearbySegments([])
