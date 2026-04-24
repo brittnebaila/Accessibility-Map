@@ -69,8 +69,8 @@ export function normalizeStreetName(tags = {}) {
       return `Private ${highwayTypeLabels[highwayType]}`
     }
 
-    return `Unnamed ${highwayTypeLabels[highwayType]}`
+    return highwayTypeLabels[highwayType]
   }
 
-  return 'Unnamed local street'
+  return 'Local street'
 }

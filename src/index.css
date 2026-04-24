@@ -44,9 +44,9 @@ select {
 }
 
 #root {
-  width: min(1180px, calc(100% - 2rem));
+  width: calc(100% - 48px);
   margin: 0 auto;
-  padding: 1.5rem 0 2.5rem;
+  padding: 16px 0 18px;
 }
 
 h1,
@@ -82,9 +82,8 @@ strong {
 
 @media (max-width: 640px) {
   #root {
-    width: min(100% - 1rem, 42rem);
-    padding-top: 0.75rem;
-    padding-bottom: 1.5rem;
+    width: calc(100% - 24px);
+    padding: 12px 0 16px;
   }
 
   h1 {

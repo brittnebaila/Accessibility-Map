@@ -38,6 +38,20 @@ function RecenterMap({ center }) {
   return null
 }
 
+function RefreshMapSize() {
+  const map = useMap()
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      map.invalidateSize()
+    }, 0)
+
+    return () => window.clearTimeout(timerId)
+  }, [map])
+
+  return null
+}
+
 async function fetchSuggestions(query, signal) {
   const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal })
   const data = await response.json()
@@ -69,7 +83,9 @@ function App() {
   const [selectedRadius, setSelectedRadius] = useState(radiusOptions[1].label)
   const [mapCenter, setMapCenter] = useState(defaultCenter)
   const [searchState, setSearchState] = useState('idle')
-  const [feedback, setFeedback] = useState('Search for a place to preview nearby streets with StreetEase.')
+  const [feedback, setFeedback] = useState(
+    'Search for a place to preview nearby streets with StreetEase.',
+  )
   const [streetFetchState, setStreetFetchState] = useState('idle')
   const [streetFeedback, setStreetFeedback] = useState(
     'Searching the nearby street network for this area.',
@@ -165,7 +181,9 @@ function App() {
     setSuggestions([])
     setSuggestionMessage('')
     setSearchState('success')
-      setFeedback(`StreetEase is showing a ${selectedRadiusOption.label} preview around ${location.label}.`)
+    setFeedback(
+      `StreetEase is showing a ${selectedRadiusOption.label} preview around ${location.label}.`,
+    )
   }
 
   async function handleSearch(event) {
@@ -207,24 +225,29 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero-panel">
-        <div className="hero-copy">
-          <p className="eyebrow">StreetEase</p>
-          <h1>Preview nearby street steepness before you head out.</h1>
-          <p className="hero-text">
-            StreetEase helps you search a place, choose a radius, and scan
-            nearby streets with a grade-based map overlay designed for quick readability.
-          </p>
+      <aside className="left-rail">
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true">
+            SE
+          </div>
+          <div>
+            <p className="eyebrow">StreetEase</p>
+            <h1>Street grades made easier to read.</h1>
+          </div>
         </div>
 
-        <form className="search-card" onSubmit={handleSearch}>
+        <p className="rail-copy">
+          Search a place, choose a distance, and let the map take center stage.
+        </p>
+
+        <form className="search-card" id="search-panel" onSubmit={handleSearch}>
           <label className="field-group">
             <span className="field-label">Address</span>
             <div className="autocomplete">
               <input
                 className="text-input"
                 type="text"
-                placeholder="Enter an address or landmark"
+                placeholder="Search an address or landmark"
                 aria-label="Address"
                 aria-expanded={showSuggestions && suggestions.length > 0}
                 aria-autocomplete="list"
@@ -276,7 +299,7 @@ function App() {
           </label>
 
           <button className="primary-button" type="submit" disabled={searchState === 'loading'}>
-            {searchState === 'loading' ? 'Finding address...' : 'Preview street grades'}
+            {searchState === 'loading' ? 'Finding place...' : 'Show street grades'}
           </button>
 
           <p className={`search-note search-note-${searchState}`} aria-live="polite">
@@ -300,118 +323,108 @@ function App() {
             </p>
           )}
         </form>
-      </section>
+      </aside>
 
-      <section className="workspace">
-        <div className="map-card">
-          <div className="map-card-header">
-            <div>
-              <p className="section-label">StreetEase Map</p>
-              <h2>Color-coded streets around the selected address</h2>
-            </div>
-            <div className="legend" aria-label="Grade legend">
-              {gradeBands.map((band) => (
-                <div className="legend-item" key={band.label}>
-                  <span className={band.colorClass} aria-hidden="true" />
-                  <span>
-                    {band.label} <strong>{band.range}</strong>
-                  </span>
-                </div>
-              ))}
-            </div>
+      <section className="map-stage" id="map-panel">
+        <header className="map-stage-header">
+          <div>
+            <p className="section-label">Live Map</p>
+            <h2>{selectedAddress}</h2>
           </div>
-
           <p className={`map-status map-status-${streetFetchState}`} aria-live="polite">
             {streetFeedback}
           </p>
+        </header>
 
-          <div className="map-frame">
-            <MapContainer
+        <div className="map-frame">
+          <MapContainer
+            center={mapCenter}
+            zoom={15}
+            scrollWheelZoom
+            className="leaflet-map"
+          >
+            <RecenterMap center={mapCenter} />
+            <RefreshMapSize />
+
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+
+            <Circle
               center={mapCenter}
-              zoom={15}
-              scrollWheelZoom
-              className="leaflet-map"
-            >
-              <RecenterMap center={mapCenter} />
+              radius={selectedRadiusOption.meters}
+              pathOptions={{
+                color: '#315641',
+                fillColor: '#6ba77e',
+                fillOpacity: 0.08,
+                weight: 2,
+                dashArray: '6 6',
+              }}
+            />
 
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+            <Marker position={mapCenter}>
+              <Popup>
+                <strong>{selectedAddress}</strong>
+                <br />
+                Radius: {selectedRadiusOption.label}
+              </Popup>
+            </Marker>
 
-              <Circle
-                center={mapCenter}
-                radius={selectedRadiusOption.meters}
-                pathOptions={{
-                  color: '#315641',
-                  fillColor: '#6ba77e',
-                  fillOpacity: 0.08,
-                  weight: 2,
-                  dashArray: '6 6',
-                }}
-              />
-
-              <Marker position={mapCenter}>
+            {nearbySegments.map((segment) => (
+              <Polyline
+                key={segment.id}
+                positions={segment.positions}
+                pathOptions={{ color: segment.color, weight: 6, lineCap: 'round' }}
+              >
                 <Popup>
-                  <strong>{selectedAddress}</strong>
+                  <strong>{segment.street}</strong>
                   <br />
-                  Radius: {selectedRadiusOption.label}
+                  Estimated max grade: {segment.grade}
+                  <br />
+                  Segment length: {segment.distance}
                 </Popup>
-              </Marker>
+              </Polyline>
+            ))}
+          </MapContainer>
 
-              {nearbySegments.map((segment) => (
-                <Polyline
-                  key={segment.id}
-                  positions={segment.positions}
-                  pathOptions={{ color: segment.color, weight: 6, lineCap: 'round' }}
-                >
-                  <Popup>
-                    <strong>{segment.street}</strong>
-                    <br />
-                    Estimated max grade: {segment.grade}
-                    <br />
-                    Segment length: {segment.distance}
-                  </Popup>
-                </Polyline>
-              ))}
-            </MapContainer>
+          <div className="map-pill map-pill-top">Selected address</div>
+          <div className="map-pill map-pill-bottom">{selectedRadiusOption.label} radius</div>
+        </div>
+      </section>
 
-            <div className="map-pill map-pill-top">Selected address</div>
-            <div className="map-pill map-pill-bottom">{selectedRadiusOption.label} radius</div>
-          </div>
+      <aside className="details-panel" id="street-details">
+        <div className="details-header">
+          <p className="section-label">Street Details</p>
+          <h2>Closest segments</h2>
         </div>
 
-        <aside className="insight-card">
-          <div>
-            <p className="section-label">StreetEase Details</p>
-            <h2>Real nearby street geometry with estimated elevation grades</h2>
-          </div>
+        <div className="legend-card" aria-label="Grade legend">
+          {gradeBands.map((band) => (
+            <div className="legend-item" key={band.label}>
+              <span className={band.colorClass} aria-hidden="true" />
+              <span>
+                {band.label} <strong>{band.range}</strong>
+              </span>
+            </div>
+          ))}
+        </div>
 
-          <ul className="segment-list">
-            {nearbySegments.slice(0, 8).map((segment) => (
-              <li className="segment-item" key={segment.id}>
-                <div>
-                  <p className="segment-name">{segment.street}</p>
-                  <p className="segment-meta">{segment.distance} segment length</p>
-                </div>
-                <div className="segment-grade">
-                  <span className={`grade ${segment.colorClass}`} aria-hidden="true" />
-                  <strong>{segment.grade}</strong>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <div className="checklist">
-            <p className="section-label">StreetEase Focus</p>
-            <ul>
-              <li>Address search with backend autocomplete</li>
-              <li>Backend street and elevation pipeline</li>
-              <li>Cleaner street naming from the API layer</li>
-            </ul>
-          </div>
-        </aside>
-      </section>
+        <ul className="segment-list">
+          {nearbySegments.slice(0, 10).map((segment) => (
+            <li className="segment-item" key={segment.id}>
+              <div>
+                <p className="segment-name">{segment.street}</p>
+                <p className="segment-meta">{segment.distance} segment length</p>
+              </div>
+              <div className="segment-grade">
+                <span className={`grade ${segment.colorClass}`} aria-hidden="true" />
+                <strong>{segment.grade}</strong>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </aside>
     </main>
   )
 }
