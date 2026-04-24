@@ -22,6 +22,12 @@ const radiusOptions = [
   { label: '1 mile', meters: 1609 },
 ]
 
+const zoomByRadiusLabel = {
+  '0.25 miles': 17,
+  '0.5 miles': 16,
+  '1 mile': 15,
+}
+
 const defaultAddress = 'Civic Center, San Francisco, CA'
 const defaultCenter = [37.7749, -122.4194]
 
@@ -99,6 +105,7 @@ function App() {
 
   const selectedRadiusOption =
     radiusOptions.find((option) => option.label === selectedRadius) ?? radiusOptions[1]
+  const selectedZoom = zoomByRadiusLabel[selectedRadiusOption.label] ?? 15
 
   useEffect(() => {
     if (addressInput.trim().length < 3 || selectedSuggestion?.label === addressInput.trim()) {
@@ -225,121 +232,147 @@ function App() {
 
   return (
     <main className="app-shell">
-      <aside className="left-rail">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">
+      <aside className="nav-rail" aria-label="StreetEase navigation">
+        <div className="nav-rail-header">
+          <div className="nav-brand" aria-hidden="true">
             SE
           </div>
-          <div>
-            <p className="eyebrow">StreetEase</p>
-            <h1>Street grades made easier to read.</h1>
+          <div className="nav-copy">
+            <p className="nav-kicker">StreetEase</p>
+            <h2>Accessibility map</h2>
+            <p className="nav-description">
+              Street grades, nearby segments, and search all in one calmer map view.
+            </p>
           </div>
         </div>
 
-        <p className="rail-copy">
-          Search a place, choose a distance, and let the map take center stage.
-        </p>
+        <div className="nav-divider" />
 
-        <form className="search-card" id="search-panel" onSubmit={handleSearch}>
-          <label className="field-group">
-            <span className="field-label">Address</span>
-            <div className="autocomplete">
-              <input
-                className="text-input"
-                type="text"
-                placeholder="Search an address or landmark"
-                aria-label="Address"
-                aria-expanded={showSuggestions && suggestions.length > 0}
-                aria-autocomplete="list"
-                value={addressInput}
-                onChange={(event) => {
-                  setAddressInput(event.target.value)
-                  setSelectedSuggestion(null)
-                  setShowSuggestions(true)
-                }}
-                onFocus={() => {
-                  if (suggestions.length) {
-                    setShowSuggestions(true)
-                  }
-                }}
-              />
-
-              {showSuggestions && suggestions.length > 0 && (
-                <ul className="suggestion-list" role="listbox" aria-label="Address suggestions">
-                  {suggestions.map((suggestion) => (
-                    <li key={suggestion.id}>
-                      <button
-                        className="suggestion-item"
-                        type="button"
-                        onClick={() => applySelectedLocation(suggestion)}
-                      >
-                        {suggestion.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </label>
-
-          <label className="field-group">
-            <span className="field-label">Radius</span>
-            <select
-              className="select-input"
-              value={selectedRadius}
-              aria-label="Radius"
-              onChange={(event) => setSelectedRadius(event.target.value)}
-            >
-              {radiusOptions.map((option) => (
-                <option key={option.label} value={option.label}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button className="primary-button" type="submit" disabled={searchState === 'loading'}>
-            {searchState === 'loading' ? 'Finding place...' : 'Show street grades'}
+        <div className="nav-menu">
+          <button className="nav-item nav-item-active" type="button" aria-label="Map view">
+            <span className="nav-icon" aria-hidden="true">⌂</span>
+            <span>Map</span>
           </button>
-
-          <p className={`search-note search-note-${searchState}`} aria-live="polite">
-            {feedback}
-          </p>
-
-          {suggestionState === 'loading' && (
-            <p className="suggestion-note" aria-live="polite">
-              Looking up address suggestions...
-            </p>
-          )}
-
-          {suggestionState !== 'loading' && suggestionMessage && (
-            <p
-              className={`suggestion-note ${
-                suggestionState === 'error' ? 'suggestion-note-error' : ''
-              }`}
-              aria-live="polite"
-            >
-              {suggestionMessage}
-            </p>
-          )}
-        </form>
+          <button className="nav-item" type="button" aria-label="Search history">
+            <span className="nav-icon" aria-hidden="true">⌕</span>
+            <span>Search</span>
+          </button>
+          <button className="nav-item" type="button" aria-label="Saved places">
+            <span className="nav-icon" aria-hidden="true">★</span>
+            <span>Saved</span>
+          </button>
+          <button className="nav-item" type="button" aria-label="Street details">
+            <span className="nav-icon" aria-hidden="true">≣</span>
+            <span>Details</span>
+          </button>
+        </div>
       </aside>
 
       <section className="map-stage" id="map-panel">
-        <header className="map-stage-header">
+        <div className="map-stage-header">
           <div>
-            <p className="section-label">Live Map</p>
-            <h2>{selectedAddress}</h2>
+            <p className="section-label">StreetEase</p>
+            <h1>{selectedAddress}</h1>
           </div>
           <p className={`map-status map-status-${streetFetchState}`} aria-live="polite">
             {streetFeedback}
           </p>
-        </header>
+        </div>
 
         <div className="map-frame">
+          <form className="map-search-overlay" id="search-panel" onSubmit={handleSearch}>
+            <div className="search-bar-main">
+              <label className="field-group search-field search-field-address">
+                <span className="sr-only">Address</span>
+                <div className="autocomplete">
+                  <input
+                    className="text-input text-input-address"
+                    type="text"
+                    placeholder="Find address or place"
+                    aria-label="Address"
+                    aria-expanded={showSuggestions && suggestions.length > 0}
+                    aria-autocomplete="list"
+                    value={addressInput}
+                    onChange={(event) => {
+                      setAddressInput(event.target.value)
+                      setSelectedSuggestion(null)
+                      setShowSuggestions(true)
+                    }}
+                    onFocus={() => {
+                      if (suggestions.length) {
+                        setShowSuggestions(true)
+                      }
+                    }}
+                  />
+
+                  {showSuggestions && suggestions.length > 0 && (
+                    <ul className="suggestion-list" role="listbox" aria-label="Address suggestions">
+                      {suggestions.map((suggestion) => (
+                        <li key={suggestion.id}>
+                          <button
+                            className="suggestion-item"
+                            type="button"
+                            onClick={() => applySelectedLocation(suggestion)}
+                          >
+                            {suggestion.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </label>
+
+              <label className="field-group search-field search-field-radius">
+                <span className="sr-only">Radius</span>
+                <select
+                  className="select-input"
+                  value={selectedRadius}
+                  aria-label="Radius"
+                  onChange={(event) => setSelectedRadius(event.target.value)}
+                >
+                  {radiusOptions.map((option) => (
+                    <option key={option.label} value={option.label}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="search-actions">
+                <button className="primary-button" type="submit" disabled={searchState === 'loading'}>
+                  {searchState === 'loading' ? 'Finding...' : 'Search'}
+                </button>
+              </div>
+            </div>
+
+            <div className="search-status">
+              <p className={`search-note search-note-${searchState}`} aria-live="polite">
+                {feedback}
+              </p>
+
+              {suggestionState === 'loading' && (
+                <p className="suggestion-note" aria-live="polite">
+                  Looking up address suggestions...
+                </p>
+              )}
+
+              {suggestionState !== 'loading' && suggestionMessage && (
+                <p
+                  className={`suggestion-note ${
+                    suggestionState === 'error' ? 'suggestion-note-error' : ''
+                  }`}
+                  aria-live="polite"
+                >
+                  {suggestionMessage}
+                </p>
+              )}
+            </div>
+          </form>
+
           <MapContainer
             center={mapCenter}
-            zoom={15}
+            zoom={selectedZoom}
             scrollWheelZoom
             className="leaflet-map"
           >
@@ -395,7 +428,7 @@ function App() {
 
       <aside className="details-panel" id="street-details">
         <div className="details-header">
-          <p className="section-label">Street Details</p>
+          <p className="section-label">Street details</p>
           <h2>Closest segments</h2>
         </div>
 
