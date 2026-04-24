@@ -64,12 +64,12 @@ async function fetchGrades(lat, lng, radius, signal) {
 }
 
 function App() {
-  const [addressInput, setAddressInput] = useState(defaultAddress)
+  const [addressInput, setAddressInput] = useState('')
   const [selectedAddress, setSelectedAddress] = useState(defaultAddress)
   const [selectedRadius, setSelectedRadius] = useState(radiusOptions[1].label)
   const [mapCenter, setMapCenter] = useState(defaultCenter)
   const [searchState, setSearchState] = useState('idle')
-  const [feedback, setFeedback] = useState('Search for an address to recenter the map preview.')
+  const [feedback, setFeedback] = useState('Search for a place to preview nearby streets with StreetEase.')
   const [streetFetchState, setStreetFetchState] = useState('idle')
   const [streetFeedback, setStreetFeedback] = useState(
     'Searching the nearby street network for this area.',
@@ -89,6 +89,7 @@ function App() {
       setSuggestions([])
       setSuggestionState('idle')
       setSuggestionMessage('')
+      setShowSuggestions(false)
       return undefined
     }
 
@@ -164,7 +165,7 @@ function App() {
     setSuggestions([])
     setSuggestionMessage('')
     setSearchState('success')
-    setFeedback(`Showing a ${selectedRadiusOption.label} preview around ${location.label}.`)
+      setFeedback(`StreetEase is showing a ${selectedRadiusOption.label} preview around ${location.label}.`)
   }
 
   async function handleSearch(event) {
@@ -208,11 +209,11 @@ function App() {
     <main className="app-shell">
       <section className="hero-panel">
         <div className="hero-copy">
-          <p className="eyebrow">Accessibility Map</p>
-          <h1>See street steepness around any address before you head out.</h1>
+          <p className="eyebrow">StreetEase</p>
+          <h1>Preview nearby street steepness before you head out.</h1>
           <p className="hero-text">
-            Search a place, choose a radius, and preview nearby streets with
-            grade-based colors designed to be easy to scan.
+            StreetEase helps you search a place, choose a radius, and scan
+            nearby streets with a grade-based map overlay designed for quick readability.
           </p>
         </div>
 
@@ -305,7 +306,7 @@ function App() {
         <div className="map-card">
           <div className="map-card-header">
             <div>
-              <p className="section-label">Map Preview</p>
+              <p className="section-label">StreetEase Map</p>
               <h2>Color-coded streets around the selected address</h2>
             </div>
             <div className="legend" aria-label="Grade legend">
@@ -382,7 +383,7 @@ function App() {
 
         <aside className="insight-card">
           <div>
-            <p className="section-label">Nearby Streets</p>
+            <p className="section-label">StreetEase Details</p>
             <h2>Real nearby street geometry with estimated elevation grades</h2>
           </div>
 
@@ -402,7 +403,7 @@ function App() {
           </ul>
 
           <div className="checklist">
-            <p className="section-label">V1 Focus</p>
+            <p className="section-label">StreetEase Focus</p>
             <ul>
               <li>Address search with backend autocomplete</li>
               <li>Backend street and elevation pipeline</li>
