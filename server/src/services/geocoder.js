@@ -6,6 +6,7 @@ export async function fetchPlaceSuggestions(query) {
     {
       headers: {
         Accept: 'application/json',
+        'User-Agent': 'AccessibilityMap/0.1 (development contact: local-app)',
       },
     },
   )

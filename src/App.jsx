@@ -77,6 +77,7 @@ function App() {
   const [nearbySegments, setNearbySegments] = useState([])
   const [suggestions, setSuggestions] = useState([])
   const [suggestionState, setSuggestionState] = useState('idle')
+  const [suggestionMessage, setSuggestionMessage] = useState('')
   const [selectedSuggestion, setSelectedSuggestion] = useState(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
 
@@ -87,6 +88,7 @@ function App() {
     if (addressInput.trim().length < 3 || selectedSuggestion?.label === addressInput.trim()) {
       setSuggestions([])
       setSuggestionState('idle')
+      setSuggestionMessage('')
       return undefined
     }
 
@@ -99,6 +101,7 @@ function App() {
         setSuggestions(nextSuggestions)
         setShowSuggestions(true)
         setSuggestionState(nextSuggestions.length ? 'success' : 'idle')
+        setSuggestionMessage(nextSuggestions.length ? '' : 'No matching suggestions yet.')
       } catch (error) {
         if (error.name === 'AbortError') {
           return
@@ -106,6 +109,7 @@ function App() {
 
         setSuggestions([])
         setSuggestionState('error')
+        setSuggestionMessage('Could not load suggestions right now.')
       }
     }, 300)
 
@@ -158,6 +162,7 @@ function App() {
     setMapCenter([location.lat, location.lon])
     setShowSuggestions(false)
     setSuggestions([])
+    setSuggestionMessage('')
     setSearchState('success')
     setFeedback(`Showing a ${selectedRadiusOption.label} preview around ${location.label}.`)
   }
@@ -280,6 +285,17 @@ function App() {
           {suggestionState === 'loading' && (
             <p className="suggestion-note" aria-live="polite">
               Looking up address suggestions...
+            </p>
+          )}
+
+          {suggestionState !== 'loading' && suggestionMessage && (
+            <p
+              className={`suggestion-note ${
+                suggestionState === 'error' ? 'suggestion-note-error' : ''
+              }`}
+              aria-live="polite"
+            >
+              {suggestionMessage}
             </p>
           )}
         </form>

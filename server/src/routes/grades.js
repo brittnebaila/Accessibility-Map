@@ -1,5 +1,16 @@
 import { fetchElevationGrades } from '../services/elevation.js'
-import { fetchNearbyStreetSegments } from '../services/streets.js'
+import {
+  buildEmergencyStreetFallback,
+  fetchNearbyStreetSegments,
+} from '../services/streets.js'
+import { getCacheEntry, setCacheEntry } from '../utils/cache.js'
+
+const gradesCacheNamespace = 'grades'
+const gradesCacheTtlMs = 12 * 60 * 60 * 1000
+
+function buildGradesCacheKey(lat, lng, radius) {
+  return `${lat.toFixed(5)}:${lng.toFixed(5)}:${Math.round(radius)}`
+}
 
 export async function handleGradesRoute(url) {
   const lat = Number(url.searchParams.get('lat'))
@@ -13,37 +24,86 @@ export async function handleGradesRoute(url) {
     }
   }
 
-  const segments = await fetchNearbyStreetSegments([lat, lng], radius)
+  const cacheKey = buildGradesCacheKey(lat, lng, radius)
+  const cachedPayload = await getCacheEntry(gradesCacheNamespace, cacheKey)
 
-  if (!segments.length) {
+  if (cachedPayload) {
     return {
       statusCode: 200,
       payload: {
-        segments: [],
-        streetStatus: 'error',
-        streetMessage: 'No nearby streets were returned for this area yet.',
+        ...cachedPayload,
+        streetMessage: `Showing cached street grades from a recent lookup. ${cachedPayload.streetMessage}`,
       },
     }
   }
 
   try {
-    const gradedSegments = await fetchElevationGrades(segments)
+    const streetResult = await fetchNearbyStreetSegments([lat, lng], radius)
+    const { message: streetMessage, segments } = streetResult
+
+    if (!segments.length) {
+      return {
+        statusCode: 200,
+        payload: {
+          segments: [],
+          streetStatus: 'error',
+          streetMessage: 'No nearby streets were returned for this area yet.',
+        },
+      }
+    }
+
+    try {
+      const gradedSegments = await fetchElevationGrades(segments)
+      const payload = {
+        segments: gradedSegments,
+        streetStatus: 'success',
+        streetMessage,
+      }
+
+      await setCacheEntry(gradesCacheNamespace, cacheKey, payload, gradesCacheTtlMs)
+
+      return {
+        statusCode: 200,
+        payload,
+      }
+    } catch (error) {
+      const payload = {
+        segments,
+        streetStatus: 'error',
+        streetMessage: `Loaded street geometry, but grade calculation failed: ${error.message}`,
+      }
+
+      await setCacheEntry(gradesCacheNamespace, cacheKey, payload, gradesCacheTtlMs)
+
+      return {
+        statusCode: 200,
+        payload,
+      }
+    }
+  } catch (error) {
+    const stalePayload = await getCacheEntry(gradesCacheNamespace, cacheKey, {
+      allowStale: true,
+    })
+
+    if (stalePayload) {
+      return {
+        statusCode: 200,
+        payload: {
+          ...stalePayload,
+          streetStatus: 'error',
+          streetMessage: `Using cached street data because live lookup failed: ${error.message}`,
+        },
+      }
+    }
+
+    const fallbackPayload = buildEmergencyStreetFallback([lat, lng], radius)
 
     return {
       statusCode: 200,
       payload: {
-        segments: gradedSegments,
-        streetStatus: 'success',
-        streetMessage: `Showing ${gradedSegments.length} nearby street segments with computed grade estimates.`,
-      },
-    }
-  } catch (error) {
-    return {
-      statusCode: 200,
-      payload: {
-        segments,
+        segments: fallbackPayload.segments,
         streetStatus: 'error',
-        streetMessage: `Loaded street geometry, but grade calculation failed: ${error.message}`,
+        streetMessage: `${fallbackPayload.message} Live lookup failed: ${error.message}`,
       },
     }
   }

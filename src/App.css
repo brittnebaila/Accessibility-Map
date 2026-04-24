@@ -142,6 +142,10 @@
   color: #5d6f66;
 }
 
+.suggestion-note-error {
+  color: #9a3d2a;
+}
+
 .suggestion-list {
   position: absolute;
   z-index: 700;
