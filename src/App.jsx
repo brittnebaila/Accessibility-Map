@@ -31,6 +31,28 @@ const zoomByRadiusLabel = {
 const defaultAddress = 'Civic Center, San Francisco, CA'
 const defaultCenter = [37.7749, -122.4194]
 
+function splitAddressForHeader(address) {
+  const parts = address
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  if (parts.length <= 2) {
+    return {
+      primary: address,
+      secondary: '',
+    }
+  }
+
+  const cityStartIndex = parts.length > 4 ? parts.length - 4 : parts.length - 2
+
+  return {
+    primary: parts.slice(0, cityStartIndex).join(', '),
+    secondary: parts.slice(cityStartIndex).join(', '),
+  }
+}
+
+
 function RecenterMap({ center }) {
   const map = useMap()
 
@@ -106,6 +128,7 @@ function App() {
   const selectedRadiusOption =
     radiusOptions.find((option) => option.label === selectedRadius) ?? radiusOptions[1]
   const selectedZoom = zoomByRadiusLabel[selectedRadiusOption.label] ?? 15
+  const headerAddress = splitAddressForHeader(selectedAddress)
 
   useEffect(() => {
     if (addressInput.trim().length < 3 || selectedSuggestion?.label === addressInput.trim()) {
@@ -272,7 +295,14 @@ function App() {
         <div className="map-stage-header">
           <div>
             <p className="section-label">StreetEase</p>
-            <h1>{selectedAddress}</h1>
+            <h1>
+              <span className="map-title-primary">
+                {headerAddress.secondary ? `${headerAddress.primary},` : headerAddress.primary}
+              </span>
+              {headerAddress.secondary && (
+                <span className="map-title-secondary">{headerAddress.secondary}</span>
+              )}
+            </h1>
           </div>
           <p className={`map-status map-status-${streetFetchState}`} aria-live="polite">
             {streetFeedback}

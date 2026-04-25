@@ -76,16 +76,22 @@ export function sampleLinePoints(positions, sampleCount) {
   return sampledPoints
 }
 
+const highGradeDisplayCap = 20
+const highGradeFlagThreshold = 25
+
 export function classifyGrade(maxGrade) {
+  const displayLabel =
+    maxGrade > highGradeFlagThreshold ? `${highGradeDisplayCap}%+` : `${maxGrade.toFixed(1)}%`
+
   if (maxGrade <= 4) {
-    return { label: `${maxGrade.toFixed(1)}%`, color: '#2e8b57', colorClass: 'grade-green' }
+    return { label: displayLabel, color: '#2e8b57', colorClass: 'grade-green' }
   }
 
   if (maxGrade <= 8) {
-    return { label: `${maxGrade.toFixed(1)}%`, color: '#f0b429', colorClass: 'grade-yellow' }
+    return { label: displayLabel, color: '#f0b429', colorClass: 'grade-yellow' }
   }
 
-  return { label: `${maxGrade.toFixed(1)}%`, color: '#d95d39', colorClass: 'grade-red' }
+  return { label: displayLabel, color: '#d95d39', colorClass: 'grade-red' }
 }
 
 export function applyElevationGrades(segments, elevationsBySegment) {
